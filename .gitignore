@@ -1,0 +1,16 @@
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+~$*.xlsx
+
+# Trained models produced when the notebooks run
+notebooks/classifier/
+notebooks/regressor/
+*.pkl
+
+# Credentials: never commit these
+*credentials*.json
+*service-account*.json
+.env
