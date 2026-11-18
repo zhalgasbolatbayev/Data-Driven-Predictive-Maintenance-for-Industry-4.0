@@ -1,0 +1,1694 @@
+[
+    {
+        "id": "667f94d3bc571df0",
+        "type": "tab",
+        "label": "Поток 2",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "66716c20403d54c3",
+        "type": "s7 in",
+        "z": "667f94d3bc571df0",
+        "endpoint": "bdb2df8dbc506894",
+        "mode": "single",
+        "variable": "x1B2",
+        "diff": true,
+        "name": "Downstream station",
+        "x": 390,
+        "y": 420,
+        "wires": [
+            [
+                "be67a0fde4f45928",
+                "babd58572979b217",
+                "a021f739920a7a49"
+            ]
+        ]
+    },
+    {
+        "id": "fc168c0e3a73318f",
+        "type": "s7 in",
+        "z": "667f94d3bc571df0",
+        "endpoint": "bdb2df8dbc506894",
+        "mode": "single",
+        "variable": "x1B1",
+        "diff": true,
+        "name": "Upstream station",
+        "x": 400,
+        "y": 660,
+        "wires": [
+            [
+                "be67a0fde4f45928",
+                "babd58572979b217",
+                "2733ba76f911b6aa"
+            ]
+        ]
+    },
+    {
+        "id": "ddd7b65ee0bc49ea",
+        "type": "debug",
+        "z": "667f94d3bc571df0",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 3820,
+        "y": 780,
+        "wires": []
+    },
+    {
+        "id": "be67a0fde4f45928",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Carrier2TestingStation",
+        "func": "// Carrier2TestingStation \n// Retrieve or initialize context variables\nlet state = context.get(\"processState\") || \"idle\"; // Our state machine\nlet lastDownstream = context.get(\"lastDownstream\");\nif (lastDownstream === undefined) {\n    // Initially, x1B2 is True.\n    lastDownstream = true;\n    context.set(\"lastDownstream\", lastDownstream);\n}\nlet cycle1Start = context.get(\"cycle1Start\") || null;  // Timestamp when x1B2 goes False\nlet cycle1Delta = context.get(\"cycle1Delta\") || null;  // Delta for 1st cycle (x1B3 True - x1B2 False)\nlet cycle2Start = context.get(\"cycle2Start\") || null;  // Timestamp when x1B3 goes False (after cycle1)\nlet cycleResults = context.get(\"cycleResults\") || [];  // To store complete cycles\n\nlet topic = msg.topic;\nlet payload = msg.payload;\n\n// --- State: idle ---\n// Wait for x1B2 falling edge to start the 1st cycle\nif (state === \"idle\") {\n    if (topic === \"x1B2\") {\n        // Check for falling edge: previously True and now False.\n        if (lastDownstream === true && payload === false) {\n            cycle1Start = new Date().getTime();\n            context.set(\"cycle1Start\", cycle1Start);\n            context.set(\"processState\", \"waiting_sort1\");\n            node.warn(\"6_N_N Cycle 1 started : x1B3 false\");\n        }\n        context.set(\"lastDownstream\", payload);\n    }\n    return null;\n}\n\n// --- State: waiting_sort1 ---\n// Wait for Sorting sensor (x1B3) to go True to complete the 1st cycle\nelse if (state === \"waiting_sort1\") {\n    if (topic === \"x1B3\" && payload === true) {\n        let cycle1End = new Date().getTime();\n        cycle1Delta = cycle1End - cycle1Start;\n        context.set(\"cycle1Delta\", cycle1Delta);\n        context.set(\"processState\", \"waiting_sort_false2\");\n        node.warn(+ cycle1Delta);\n    }\n    return null;\n}\n\n// --- State: waiting_sort_false2 ---\n// After the 1st cycle, wait for the Sorting sensor (x1B3) to go False to mark the start of the 2nd cycle.\nelse if (state === \"waiting_sort_false2\") {\n    if (topic === \"x1B3\" && payload === false) {\n        cycle2Start = new Date().getTime();\n        context.set(\"cycle2Start\", cycle2Start);\n        context.set(\"processState\", \"waiting_upstream2\");\n        node.warn(\"6_N_N Cycle 2 started : x1B3 false.\");\n    }\n    return null;\n}\n\n// --- State: waiting_upstream2 ---\n// Wait for Upstream sensor (x1B1) to go True to complete the 2nd cycle.\nelse if (state === \"waiting_upstream2\") {\n    if (topic === \"x1B1\" && payload === true) {\n        let cycle2End = new Date().getTime();\n        let delta2 = cycle2End - cycle2Start;\n        node.warn( + delta2);\n        // Create two messages:\n        // Message 1: 1st cycle data\n        let msg1 = {\n            topic: \"Cycle 1\",\n            payload: { \"6_N_N Timestamp Down str. to Sorting \": cycle1Delta }\n        };\n        // Message 2: 2nd cycle data\n        let msg2 = {\n            topic: \"Cycle 2\",\n            payload: { \"6_N_N Timestamp Sorting to Up str.\": delta2 }\n        };\n        // Optionally, store the complete cycle\n        cycleResults.push({ cycle1: cycle1Delta, cycle2: delta2 });\n        context.set(\"cycleResults\", cycleResults);\n        // Reset state for the next complete cycle\n        context.set(\"processState\", \"idle\");\n        context.set(\"cycle1Start\", null);\n        context.set(\"cycle1Delta\", null);\n        context.set(\"cycle2Start\", null);\n\n        // Return two messages: Output 1 for Cycle 1, Output 2 for Cycle 2.\n        return [msg1, msg2];\n    }\n    return null;\n}\n\n// Fallback: reset if an unexpected state is encountered.\nnode.warn(\"Unexpected state: \" + state);\ncontext.set(\"processState\", \"idle\");\nreturn null;",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 780,
+        "y": 580,
+        "wires": [
+            [
+                "34acad33d426f68b"
+            ],
+            [
+                "ade0a421d14fa589"
+            ]
+        ]
+    },
+    {
+        "id": "07710f7f07706178",
+        "type": "GSheet",
+        "z": "667f94d3bc571df0",
+        "creds": "bf2c04d07e34bebd",
+        "method": "append",
+        "action": "",
+        "sheet": "1rPK14ZA8zIyqchmlwdvMNzdpnAcU6QdrRLussgvouwA",
+        "cells": "Sheet1!A2:A1000",
+        "flatten": false,
+        "name": "Handling time (Dn to Up)",
+        "x": 1410,
+        "y": 540,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "baf50a38ac9f6466",
+        "type": "s7 in",
+        "z": "667f94d3bc571df0",
+        "d": true,
+        "endpoint": "e7c249d4733db719",
+        "mode": "single",
+        "variable": "x2M1",
+        "diff": true,
+        "name": "Vacuum on",
+        "x": 2660,
+        "y": 1300,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "d1a9930e05baec3b",
+        "type": "s7 in",
+        "z": "667f94d3bc571df0",
+        "d": true,
+        "endpoint": "87a9594116ec3158",
+        "mode": "single",
+        "variable": "xB2",
+        "diff": true,
+        "name": "Workpiece on lift",
+        "x": 2660,
+        "y": 1380,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "cb6e132efb66db60",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "function 10",
+        "func": "// Get the current state of the process from the context\nlet processState = context.get(\"processState\") || \"idle\"; // Possible states: \"idle\", \"cylinderActive\", \"waitingAirSlide\"\nlet startTime = context.get(\"startTime\"); // Stores the start timestamp for the cycle\n\n// Check if the input message contains the required properties\nif (!msg.payload || !msg.topic) {\n    return null;\n}\n\n// Extract the current topic and payload\nlet topic = msg.topic;\nlet payload = msg.payload;\n\n// Handle \"x1B1\" (cylinder retracted)\nif (topic === \"x2M1\") {\n    if (payload === true) {\n        // If the cylinder retracted signal is true and we're idle, start the cycle\n        if (processState === \"idle\") {\n            startTime = new Date().getTime(); // Record the current timestamp\n            context.set(\"startTime\", startTime);\n            context.set(\"processState\", \"cylinderActive\");\n            node.warn(\"Cycle started: Cylinder retracted (x2M1)\");\n        }\n    } else if (payload === false) {\n        // Ignore false signals from \"x1B1\"\n        return null;\n    }\n}\n\n// Handle \"x3M1\" (Air slide)\nelse if (topic === \"xB2\") {\n    if (payload === true) {\n        // If the Air slide signal is true and we're waiting for it, complete the cycle\n        if (processState === \"cylinderActive\") {\n            let endTime = new Date().getTime(); // Record the current timestamp\n            if (startTime) {\n                let delta = Math.abs(endTime - startTime); // Calculate the time difference\n                context.set(\"processState\", \"idle\"); // Reset the state for the next cycle\n\n                // Send the calculated delta as a new message\n                return {\n                    topic: \"Cycle Time\",\n                    payload: delta\n                };\n            } else {\n                node.error(\"Start time is missing. Cannot calculate delta.\");\n                return null;\n            }\n        }\n    } else if (payload === false) {\n        // Ignore false signals from \"x3M1\"\n        return null;\n    }\n}\n\n// Log unexpected topics\nelse {\n    node.warn(`Unexpected topic \"${topic}\" received. Ignoring message.`);\n    return null;\n}\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 2960,
+        "y": 1340,
+        "wires": [
+            [
+                "5a549a927884ef51"
+            ]
+        ]
+    },
+    {
+        "id": "07c455f6ba3c0596",
+        "type": "s7 in",
+        "z": "667f94d3bc571df0",
+        "endpoint": "bdb2df8dbc506894",
+        "mode": "single",
+        "variable": "x1B3",
+        "diff": true,
+        "name": "Sorting Position",
+        "x": 400,
+        "y": 540,
+        "wires": [
+            [
+                "be67a0fde4f45928",
+                "babd58572979b217",
+                "ec57045092a34a4c"
+            ]
+        ]
+    },
+    {
+        "id": "d2620bc0d0713d2e",
+        "type": "GSheet",
+        "z": "667f94d3bc571df0",
+        "creds": "bf2c04d07e34bebd",
+        "method": "append",
+        "action": "",
+        "sheet": "11X1FMENq6VNCraRmZlgWrlnRXdpz87gQkYWtHr9ydIo",
+        "cells": "Sheet1!A2:A1000",
+        "flatten": false,
+        "name": "Handling time (Up to Dn)",
+        "x": 1410,
+        "y": 700,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "babd58572979b217",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "TestingStation2Carrier",
+        "func": "// Retrieve or initialize context variables for state and cycle timestamps\nlet state = context.get(\"processState\") || \"idle\";  // Our state machine\nlet cycle1Start = context.get(\"cycle1Start\") || null; // Timestamp when x1B1 falls (cycle 1 start)\nlet cycle1Delta = context.get(\"cycle1Delta\") || null; // Delta for 1st cycle (x1B3 True - x1B1 False)\nlet cycle2Start = context.get(\"cycle2Start\") || null; // Timestamp when x1B3 falls (cycle 2 start)\nlet cycleResults = context.get(\"cycleResults\") || []; // To store complete cycles\n\n// For reverse, track last state of Upstream (x1B1)\n// Now we assume that initially, x1B1 is False.\nlet lastUpstream = context.get(\"lastUpstream\");\nif (lastUpstream === undefined) {\n    lastUpstream = false;\n    context.set(\"lastUpstream\", lastUpstream);\n}\n// For the 2nd cycle, we assume Downstream (x1B2) initial state is False\nlet lastDownstream = context.get(\"lastDownstream\");\nif (lastDownstream === undefined) {\n    lastDownstream = false;\n    context.set(\"lastDownstream\", lastDownstream);\n}\n\nlet topic = msg.topic;\nlet payload = msg.payload;\n\n// --- State: idle ---\n// 1st cycle starts when Upstream sensor (x1B1) goes from True to False (falling edge).\nif (state === \"idle\") {\n    if (topic === \"x1B1\") {\n        // Only trigger if the previous state was True and now it goes False.\n        if (lastUpstream === true && payload === false) {\n            cycle1Start = new Date().getTime();\n            context.set(\"cycle1Start\", cycle1Start);\n            context.set(\"processState\", \"waiting_sort1\");\n            node.warn(\"6_N_N Reverse Cycle 3 started: x1B1 false.\");\n        }\n        // Update lastUpstream state regardless.\n        context.set(\"lastUpstream\", payload);\n    }\n    return null;\n}\n\n// --- State: waiting_sort1 ---\n// Wait for Sorting sensor (x1B3) to go True to complete the 1st cycle.\nelse if (state === \"waiting_sort1\") {\n    if (topic === \"x1B3\" && payload === true) {\n        let cycle1End = new Date().getTime();\n        cycle1Delta = cycle1End - cycle1Start;\n        context.set(\"cycle1Delta\", cycle1Delta);\n        // Move to next state: wait for Sorting sensor to go False (cycle 2 start).\n        context.set(\"processState\", \"waiting_sort_false2\");\n        node.warn(+ cycle1Delta);\n    }\n    return null;\n}\n\n// --- State: waiting_sort_false2 ---\n// After 1st cycle, wait for Sorting sensor (x1B3) to go False to mark the start of the 2nd cycle.\nelse if (state === \"waiting_sort_false2\") {\n    if (topic === \"x1B3\" && payload === false) {\n        cycle2Start = new Date().getTime();\n        context.set(\"cycle2Start\", cycle2Start);\n        context.set(\"processState\", \"waiting_downstream2\");\n        node.warn(\"6_Y_Y Reverse Cycle 4 started : x1B3 false.\");\n    }\n    return null;\n}\n\n// --- State: waiting_downstream2 ---\n// Wait for Downstream sensor (x1B2) to go True to complete the 2nd cycle.\nelse if (state === \"waiting_downstream2\") {\n    if (topic === \"x1B2\" && payload === true) {\n        let cycle2End = new Date().getTime();\n        let delta2 = cycle2End - cycle2Start;\n        node.warn(+ delta2);\n        // Prepare messages for both cycles.\n        let msg1 = {\n            topic: \"Cycle 1\",\n            payload: { \"6_N_N Timestamp Up str. to Sorting \": cycle1Delta }\n        };\n        let msg2 = {\n            topic: \"Cycle 2\",\n            payload: { \"6_N_N Timestamp Sorting to Down str. \": delta2 }\n        };\n        cycleResults.push({ cycle1: cycle1Delta, cycle2: delta2 });\n        context.set(\"cycleResults\", cycleResults);\n        // Reset state for the next complete reverse cycle.\n        context.set(\"processState\", \"idle\");\n        context.set(\"cycle1Start\", null);\n        context.set(\"cycle1Delta\", null);\n        context.set(\"cycle2Start\", null);\n        return [msg1, msg2];\n    }\n    return null;\n}\n\n// Fallback: if an unexpected state is encountered, reset.\nnode.warn(\"Unexpected state: \" + state);\ncontext.set(\"processState\", \"idle\");\nreturn null;\n",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 780,
+        "y": 740,
+        "wires": [
+            [
+                "1f4cb82e530fa0a6",
+                "be84eac06ee7b515"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "9a8a5272165041dd",
+        "type": "GSheet",
+        "z": "667f94d3bc571df0",
+        "creds": "bf2c04d07e34bebd",
+        "method": "append",
+        "action": "",
+        "sheet": "1rPK14ZA8zIyqchmlwdvMNzdpnAcU6QdrRLussgvouwA",
+        "cells": "Sheet1!F2:F1000",
+        "flatten": false,
+        "name": "Handling time (Dn to Up)",
+        "x": 1410,
+        "y": 620,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "34acad33d426f68b",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Data converter function_1",
+        "func": "// Assume msg.payload is like: { \"Timestamp Dn str. to Sort\": 3711 }\nlet dataObj = msg.payload;\nlet rowData = [];\n\n// Convert object to array of [key, value]\nfor (let key in dataObj) {\n    if (dataObj.hasOwnProperty(key)) {\n        rowData.push(key, dataObj[key]);\n    }\n}\n\n// Wrap it in an array to form a row (or multiple rows if needed)\nmsg.payload = [rowData];\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1130,
+        "y": 540,
+        "wires": [
+            [
+                "07710f7f07706178"
+            ]
+        ]
+    },
+    {
+        "id": "ade0a421d14fa589",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Data converter function_2",
+        "func": "// Assume msg.payload is an object with the 2nd cycle data\n// e.g. { \"Timestamp Sort to Up str.\": 4039 }\nlet dataObj = msg.payload;\nlet row = [];\n\n// Iterate through each key in the object (usually just one property)\nfor (let key in dataObj) {\n    if (dataObj.hasOwnProperty(key)) {\n        row.push(key);       // Column 1: the field name\n        row.push(dataObj[key]); // Column 2: the value\n    }\n}\n\n// Format as an array of rows for Google Sheets (even one row needs to be wrapped in an array)\nmsg.payload = [row];\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1130,
+        "y": 620,
+        "wires": [
+            [
+                "9a8a5272165041dd"
+            ]
+        ]
+    },
+    {
+        "id": "1f4cb82e530fa0a6",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Data converter function_3",
+        "func": "// Assume msg.payload is like: { \"Timestamp Dn str. to Sort\": 3711 }\nlet dataObj = msg.payload;\nlet rowData = [];\n\n// Convert object to array of [key, value]\nfor (let key in dataObj) {\n    if (dataObj.hasOwnProperty(key)) {\n        rowData.push(key, dataObj[key]);\n    }\n}\n\n// Wrap it in an array to form a row (or multiple rows if needed)\nmsg.payload = [rowData];\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1130,
+        "y": 700,
+        "wires": [
+            [
+                "d2620bc0d0713d2e"
+            ]
+        ]
+    },
+    {
+        "id": "be84eac06ee7b515",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Data converter function_4",
+        "func": "// Assume msg.payload is an object with the 2nd cycle data\n// e.g. { \"Timestamp Sort to Up str.\": 4039 }\nlet dataObj = msg.payload;\nlet row = [];\n\n// Iterate through each key in the object (usually just one property)\nfor (let key in dataObj) {\n    if (dataObj.hasOwnProperty(key)) {\n        row.push(key);       // Column 1: the field name\n        row.push(dataObj[key]); // Column 2: the value\n    }\n}\n\n// Format as an array of rows for Google Sheets (even one row needs to be wrapped in an array)\nmsg.payload = [row];\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1130,
+        "y": 760,
+        "wires": [
+            [
+                "022b779cac05247e"
+            ]
+        ]
+    },
+    {
+        "id": "022b779cac05247e",
+        "type": "GSheet",
+        "z": "667f94d3bc571df0",
+        "creds": "bf2c04d07e34bebd",
+        "method": "append",
+        "action": "",
+        "sheet": "11X1FMENq6VNCraRmZlgWrlnRXdpz87gQkYWtHr9ydIo",
+        "cells": "Sheet1!F2:F1000",
+        "flatten": false,
+        "name": "Handling time (Up to Dn)",
+        "x": 1410,
+        "y": 760,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "87f429eb76e188bf",
+        "type": "debug",
+        "z": "667f94d3bc571df0",
+        "name": "debug 2",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 3100,
+        "y": 900,
+        "wires": []
+    },
+    {
+        "id": "5a549a927884ef51",
+        "type": "GSheet",
+        "z": "667f94d3bc571df0",
+        "creds": "bf2c04d07e34bebd",
+        "method": "append",
+        "action": "",
+        "sheet": "1GGn6beHgySvm013G7IfvbrSNWSxKPFfE15Rff7QzNpo",
+        "cells": "Sheet1!A2:A100",
+        "flatten": false,
+        "name": "Fault conditions",
+        "x": 3240,
+        "y": 1320,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "function_convert",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "d": true,
+        "name": "Convert to Influx Format",
+        "func": "let data = JSON.parse(msg.payload);\n\nmsg.payload = [\n  {\n    measurement: \"prediction\",\n    fields: {\n      mech_1: data.mech_1_prediction,\n      mech_2: data.mech_2_prediction,\n      pressure: data.pressure_prediction\n    },\n    tags: {\n      model: \"ml_v1\"\n    }\n  }\n];\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 3250,
+        "y": 1140,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "c2cd4b72ad90945f",
+        "type": "debug",
+        "z": "667f94d3bc571df0",
+        "name": "debug 28",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 3440,
+        "y": 1260,
+        "wires": []
+    },
+    {
+        "id": "da6ac28f19ee5595",
+        "type": "inject",
+        "z": "667f94d3bc571df0",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 3200,
+        "y": 1220,
+        "wires": [
+            [
+                "c2cd4b72ad90945f"
+            ]
+        ]
+    },
+    {
+        "id": "4f84edd2f27b7a8d",
+        "type": "ui_chart",
+        "z": "667f94d3bc571df0",
+        "name": "Cycle Duration",
+        "group": "ui_group_1",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "label": "Время цикла (мс)",
+        "chartType": "line",
+        "legend": "false",
+        "xformat": "auto",
+        "interpolate": "linear",
+        "nodata": "Ожидание...",
+        "dot": false,
+        "ymin": "",
+        "ymax": "",
+        "removeOlder": "5",
+        "removeOlderPoints": "",
+        "removeOlderUnit": "60",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "x": 3480,
+        "y": 940,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "b919ed21418b0b03",
+        "type": "inject",
+        "z": "667f94d3bc571df0",
+        "name": "x1B2 false (старт)",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 2550,
+        "y": 760,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "9e03033126b0fdf0",
+        "type": "inject",
+        "z": "667f94d3bc571df0",
+        "name": "x1B1 true (конец)",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "x1B1",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 2650,
+        "y": 940,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "cfc5868143eb7167",
+        "type": "debug",
+        "z": "667f94d3bc571df0",
+        "name": "debug 32",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 3580,
+        "y": 760,
+        "wires": []
+    },
+    {
+        "id": "3930e088d1dc8738",
+        "type": "inject",
+        "z": "667f94d3bc571df0",
+        "name": "x1B2 false (старт)",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "x1B2",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 2510,
+        "y": 880,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "be795b96f04befc0",
+        "type": "inject",
+        "z": "667f94d3bc571df0",
+        "name": "x1B1 true (конец)",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "x1B1",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 2650,
+        "y": 1000,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "512969014a4b5c6d",
+        "type": "ui_button",
+        "z": "667f94d3bc571df0",
+        "name": "",
+        "group": "97130b31c1cd23df",
+        "order": 3,
+        "width": 0,
+        "height": 0,
+        "passthru": false,
+        "label": "Reset",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "icon": "",
+        "payload": "[]",
+        "payloadType": "json",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 3270,
+        "y": 880,
+        "wires": [
+            [
+                "e36c06a3b897ac91"
+            ]
+        ]
+    },
+    {
+        "id": "afb45fbab64dade2",
+        "type": "inject",
+        "z": "667f94d3bc571df0",
+        "name": "timestamp",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "2",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 2890,
+        "y": 760,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "e36c06a3b897ac91",
+        "type": "ui_chart",
+        "z": "667f94d3bc571df0",
+        "name": "",
+        "group": "97130b31c1cd23df",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "label": "chart",
+        "chartType": "line",
+        "legend": "false",
+        "xformat": "HH:mm:ss",
+        "interpolate": "linear",
+        "nodata": "",
+        "dot": false,
+        "ymin": "0",
+        "ymax": "10000",
+        "removeOlder": "30",
+        "removeOlderPoints": "",
+        "removeOlderUnit": "1",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#aec7e8",
+            "#ff7f0e",
+            "#2ca02c",
+            "#98df8a",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "x": 3550,
+        "y": 820,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "265b921cff0b4758",
+        "type": "remote-access",
+        "z": "667f94d3bc571df0",
+        "confignode": "9ced608a8bf02c8a",
+        "name": "",
+        "verbose": 0,
+        "x": 2560,
+        "y": 1120,
+        "wires": [
+            [],
+            []
+        ]
+    },
+    {
+        "id": "f096dcf4972e62ee",
+        "type": "mqtt in",
+        "z": "667f94d3bc571df0",
+        "name": "MQTT_CONNECTION",
+        "topic": "predictive/maintenance",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "6e632216b63a785c",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 240,
+        "y": 1260,
+        "wires": [
+            [
+                "f2ac0addcd7f80da",
+                "a8d67fdd18a324d3",
+                "4783d729f9fdf2cd",
+                "31951b84757980ef",
+                "9bf860b9a070c594",
+                "798cb681128ab9ab"
+            ]
+        ]
+    },
+    {
+        "id": "a021f739920a7a49",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Gripper at Downstream Station",
+        "func": "msg.topic=\"Gripper_receives_item_carrier\";\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 770,
+        "y": 280,
+        "wires": [
+            [
+                "e98a172116a84a4c"
+            ]
+        ]
+    },
+    {
+        "id": "ec57045092a34a4c",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Gripper at Sorting Position",
+        "func": "msg.topic=\"Gripper_at_midpoint\"\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 780,
+        "y": 340,
+        "wires": [
+            [
+                "e98a172116a84a4c"
+            ]
+        ]
+    },
+    {
+        "id": "2733ba76f911b6aa",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Gripper at Upstream station",
+        "func": "\nmsg.topic=\"Gripper_at_processing_station\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 780,
+        "y": 400,
+        "wires": [
+            [
+                "e98a172116a84a4c"
+            ]
+        ]
+    },
+    {
+        "id": "2014c31cbb82f51f",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Processing station status",
+        "func": "msg.topic=\"Processing\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 970,
+        "y": 480,
+        "wires": [
+            [
+                "e98a172116a84a4c"
+            ]
+        ]
+    },
+    {
+        "id": "e98a172116a84a4c",
+        "type": "ui_template",
+        "z": "667f94d3bc571df0",
+        "group": "a6d17db3e681f4f2",
+        "name": "Monitoring of Workflow",
+        "order": 1,
+        "width": 22,
+        "height": 5,
+        "format": "<!-- HTML -->\n<div class=\"gallery-container\">\n    <div class=\"gallery-item\">\n        <img id=\"phase1\" src=\"/images/phase1_static.jpg\" class=\"gallery-image\">\n        <div id=\"label1\" class=\"gallery-label\">False</div>\n    </div>\n    <div class=\"gallery-item\">\n        <img id=\"phase2\" src=\"/images/phase2_static.jpg\" class=\"gallery-image\">\n        <div id=\"label2\" class=\"gallery-label\">False</div>\n    </div>\n    <div class=\"gallery-item\">\n        <img id=\"phase3\" src=\"/images/phase3_static.jpg\" class=\"gallery-image\">\n        <div id=\"label3\" class=\"gallery-label\">False</div>\n    </div>\n    <div class=\"gallery-item\">\n        <img id=\"phase4\" src=\"/images/phase4_static.jpg\" class=\"gallery-image\">\n        <div id=\"label4\" class=\"gallery-label\">False</div>\n    </div>\n</div>\n\n<!-- CSS -->\n<style>\n    .gallery-container {\n        display: flex;\n        flex-direction: row;\n        justify-content: center;\n        align-items: center;\n        gap: 20px;\n        padding: 20px;\n        overflow-x: auto;\n    }\n\n    .gallery-item {\n        text-align: center;\n        border: 2px solid #ddd;\n        border-radius: 10px;\n        padding: 10px;\n        background-color: #f9f9f9;\n        transition: transform 0.3s ease, box-shadow 0.3s ease;\n        flex-shrink: 0;\n    }\n\n    .gallery-item:hover {\n        transform: scale(1.05);\n        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);\n    }\n\n    .gallery-image {\n        width: 150px;\n        height: 150px;\n        object-fit: cover;\n        border-radius: 8px;\n    }\n\n    .gallery-label {\n        margin-top: 10px;\n        font-size: 16px;\n        font-weight: bold;\n        color: #333;\n    }\n\n    .gallery-label.true {\n        color: #007bff; /* Blue color for \"True\" */\n    }\n\n    /* Responsive adjustments */\n    @media (max-width: 768px) {\n        .gallery-container {\n            gap: 10px;\n            padding: 10px;\n        }\n\n        .gallery-image {\n            width: 100px;\n            height: 100px;\n        }\n\n        .gallery-label {\n            font-size: 14px;\n        }\n    }\n\n    @media (max-width: 480px) {\n        .gallery-container {\n            gap: 5px;\n            padding: 5px;\n        }\n\n        .gallery-image {\n            width: 80px;\n            height: 80px;\n        }\n\n        .gallery-label {\n            font-size: 12px;\n        }\n    }\n</style>\n\n<!-- JavaScript -->\n<script>\n    (function(scope) {\n        scope.$watch('msg', function(msg) {\n            if (!msg || !msg.topic) return; // Exit if no valid message\n\n            const topic = msg.topic;\n            const payload = msg.payload;\n\n            // Map topics to their corresponding phases\n            const topicToPhase = {\n                \"Gripper_receives_item_carrier\": 1,\n                \"Gripper_at_midpoint\": 2,\n                \"Gripper_at_processing_station\": 3,\n                \"Processing\": 4\n            };\n\n            // Get the phase number from the topic\n            const phase = topicToPhase[topic];\n            if (!phase) return; // Exit if topic is not recognized\n\n            // Get the label element for the phase\n            const labelElement = document.getElementById(`label${phase}`);\n\n            // Update the label based on the payload\n            if (payload === true) {\n                labelElement.textContent = \"True\";\n                labelElement.classList.add('true'); // Add blue color\n            } else if (payload === false) {\n                labelElement.textContent = \"False\";\n                labelElement.classList.remove('true'); // Remove blue color\n            }\n        });\n    })(scope);\n</script>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "x": 1200,
+        "y": 360,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "87d630d1435ed92d",
+        "type": "ui_numeric",
+        "z": "667f94d3bc571df0",
+        "name": "",
+        "label": "Pressure input (Bar)",
+        "tooltip": "",
+        "group": "9afa42d3ad1b76fd",
+        "order": 1,
+        "width": 9,
+        "height": 1,
+        "wrap": false,
+        "passthru": true,
+        "topic": "topic",
+        "topicType": "msg",
+        "format": "{{value}}",
+        "min": 0,
+        "max": 10,
+        "step": 1,
+        "x": 1000,
+        "y": 980,
+        "wires": [
+            [
+                "4003e43023b12366"
+            ]
+        ]
+    },
+    {
+        "id": "4003e43023b12366",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Converrting Pressure output",
+        "func": "// Get the input value from the incoming message\nconst inputValue = msg.payload;\n\n// Generate a random fluctuation between -0.5 and 0.5\nconst fluctuation = (Math.random() - 0.5).toFixed(1);\n\n// Calculate the output value by adding the fluctuation to the input\nconst outputValue = (parseFloat(inputValue) + parseFloat(fluctuation)).toFixed(1);\n\n// Set the output message payload to the fluctuated value\nmsg.payload = parseFloat(outputValue);\n\n// Return the message object\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1260,
+        "y": 980,
+        "wires": [
+            [
+                "b4db4aad840b843c",
+                "93f96b6eb991d089"
+            ]
+        ]
+    },
+    {
+        "id": "b4db4aad840b843c",
+        "type": "ui_gauge",
+        "z": "667f94d3bc571df0",
+        "name": "",
+        "group": "9afa42d3ad1b76fd",
+        "order": 2,
+        "width": 9,
+        "height": 4,
+        "gtype": "gage",
+        "title": "Predicted current pressure on workflow",
+        "label": "Bar",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "9",
+        "colors": [
+            "#e6e600",
+            "#00b500",
+            "#ca3838"
+        ],
+        "seg1": "4",
+        "seg2": "6",
+        "x": 1570,
+        "y": 1020,
+        "wires": []
+    },
+    {
+        "id": "47ed15a18c6de003",
+        "type": "ui_text",
+        "z": "667f94d3bc571df0",
+        "group": "25190aeb47b782c9",
+        "order": 1,
+        "width": 7,
+        "height": 1,
+        "name": "Possible Mech. Malfunction (LABEL)",
+        "label": "Possible Mechanical Malfunction",
+        "format": "{{msg.payload}}",
+        "layout": "row-center",
+        "x": 1370,
+        "y": 1100,
+        "wires": []
+    },
+    {
+        "id": "dd01a2083e85493c",
+        "type": "ui_chart",
+        "z": "667f94d3bc571df0",
+        "name": "",
+        "group": "22a8ef49f3ae258f",
+        "order": 1,
+        "width": 22,
+        "height": 5,
+        "label": "Time-series line (Forward)",
+        "chartType": "line",
+        "legend": "false",
+        "xformat": "HH:mm:ss",
+        "interpolate": "linear",
+        "nodata": "",
+        "dot": false,
+        "ymin": "0",
+        "ymax": "10000",
+        "removeOlder": 1,
+        "removeOlderPoints": "",
+        "removeOlderUnit": "3600",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#aec7e8",
+            "#ff7f0e",
+            "#2ca02c",
+            "#98df8a",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "x": 1210,
+        "y": 1420,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "31951b84757980ef",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Pressure_Output (Converting to FORWARD Line chart) ",
+        "func": "// Generate a random integer between 6500 and 7500\nlet randomValue = Math.floor(Math.random() * (7500 - 6500 + 1)) + 6500;\n\n// Set the payload to the random value\nmsg.payload = randomValue;\n\n// Set a topic for chart labeling (optional)\nmsg.topic = \"Random Value\";\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 760,
+        "y": 1380,
+        "wires": [
+            [
+                "dd01a2083e85493c",
+                "f393557b01870498"
+            ]
+        ]
+    },
+    {
+        "id": "971d8551b633b1bd",
+        "type": "ui_button",
+        "z": "667f94d3bc571df0",
+        "name": "Reset button",
+        "group": "22a8ef49f3ae258f",
+        "order": 3,
+        "width": 5,
+        "height": 1,
+        "passthru": false,
+        "label": "Reset",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "icon": "",
+        "payload": "[]",
+        "payloadType": "json",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 1010,
+        "y": 1500,
+        "wires": [
+            [
+                "dd01a2083e85493c"
+            ]
+        ]
+    },
+    {
+        "id": "f2ac0addcd7f80da",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Pressure Output from ML Model",
+        "func": "// Generate a random integer between 6500 and 7500\nlet randomValue = Math.floor(Math.random() * (4.5 - 5.5 + 1)) + 5;\n\n// Set the payload to the random value\nmsg.payload = randomValue;\n\n// Set a topic for chart labeling (optional)\nmsg.topic = \"Random Value\";\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 690,
+        "y": 980,
+        "wires": [
+            [
+                "87d630d1435ed92d"
+            ]
+        ]
+    },
+    {
+        "id": "93f96b6eb991d089",
+        "type": "ui_gauge",
+        "z": "667f94d3bc571df0",
+        "name": "Predicted current pressure (Mobile)",
+        "group": "5ebbf26678f5c45c",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "gtype": "gage",
+        "title": "Predicted current pressure on workflow",
+        "label": "Bar",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "9",
+        "colors": [
+            "#e6e600",
+            "#00b500",
+            "#ca3838"
+        ],
+        "seg1": "4",
+        "seg2": "6",
+        "x": 1560,
+        "y": 940,
+        "wires": []
+    },
+    {
+        "id": "f393557b01870498",
+        "type": "ui_chart",
+        "z": "667f94d3bc571df0",
+        "name": "",
+        "group": "5ebbf26678f5c45c",
+        "order": 5,
+        "width": 7,
+        "height": 4,
+        "label": "Time series line Forward (Mobile)",
+        "chartType": "line",
+        "legend": "false",
+        "xformat": "HH:mm:ss",
+        "interpolate": "linear",
+        "nodata": "",
+        "dot": false,
+        "ymin": "0",
+        "ymax": "10000",
+        "removeOlder": 1,
+        "removeOlderPoints": "",
+        "removeOlderUnit": "3600",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#aec7e8",
+            "#ff7f0e",
+            "#2ca02c",
+            "#98df8a",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "x": 1140,
+        "y": 1300,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "62b2543887e767d8",
+        "type": "ui_chart",
+        "z": "667f94d3bc571df0",
+        "name": "",
+        "group": "22a8ef49f3ae258f",
+        "order": 5,
+        "width": 22,
+        "height": 5,
+        "label": "Time-series line (Backward)",
+        "chartType": "line",
+        "legend": "false",
+        "xformat": "HH:mm:ss",
+        "interpolate": "linear",
+        "nodata": "",
+        "dot": false,
+        "ymin": "0",
+        "ymax": "10000",
+        "removeOlder": 1,
+        "removeOlderPoints": "",
+        "removeOlderUnit": "3600",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#aec7e8",
+            "#ff7f0e",
+            "#2ca02c",
+            "#98df8a",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "x": 780,
+        "y": 1540,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "9bf860b9a070c594",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Pressure_Output (Converting to BACKWARD Line chart) ",
+        "func": "// Generate a random integer between 6500 and 7500\nlet randomValue = Math.floor(Math.random() * (7500 - 6500 + 1)) + 6500;\n\n// Set the payload to the random value\nmsg.payload = randomValue;\n\n// Set a topic for chart labeling (optional)\nmsg.topic = \"Random Value\";\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 1500,
+        "wires": [
+            [
+                "62b2543887e767d8",
+                "d6f132d3fdcf63f9"
+            ]
+        ]
+    },
+    {
+        "id": "0a3d97102371deef",
+        "type": "ui_button",
+        "z": "667f94d3bc571df0",
+        "name": "Reset button",
+        "group": "22a8ef49f3ae258f",
+        "order": 7,
+        "width": 5,
+        "height": 1,
+        "passthru": false,
+        "label": "Reset",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "icon": "",
+        "payload": "[]",
+        "payloadType": "json",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 530,
+        "y": 1580,
+        "wires": [
+            [
+                "62b2543887e767d8"
+            ]
+        ]
+    },
+    {
+        "id": "d6f132d3fdcf63f9",
+        "type": "ui_chart",
+        "z": "667f94d3bc571df0",
+        "name": "",
+        "group": "5ebbf26678f5c45c",
+        "order": 9,
+        "width": 7,
+        "height": 4,
+        "label": "Time-series line Backward (Mobile)",
+        "chartType": "line",
+        "legend": "false",
+        "xformat": "HH:mm:ss",
+        "interpolate": "linear",
+        "nodata": "",
+        "dot": false,
+        "ymin": "0",
+        "ymax": "10000",
+        "removeOlder": 1,
+        "removeOlderPoints": "",
+        "removeOlderUnit": "3600",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#aec7e8",
+            "#ff7f0e",
+            "#2ca02c",
+            "#98df8a",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "x": 800,
+        "y": 1460,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "8ea4d1b1ff5b8031",
+        "type": "ui_button",
+        "z": "667f94d3bc571df0",
+        "name": "Reset Button (Forward) Mobile",
+        "group": "5ebbf26678f5c45c",
+        "order": 7,
+        "width": 5,
+        "height": 1,
+        "passthru": false,
+        "label": "Reset ",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "icon": "",
+        "payload": "[]",
+        "payloadType": "json",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 810,
+        "y": 1300,
+        "wires": [
+            [
+                "f393557b01870498"
+            ]
+        ]
+    },
+    {
+        "id": "aa48fa03544f6438",
+        "type": "ui_button",
+        "z": "667f94d3bc571df0",
+        "name": "Reset Button (Backward) Mobile  ",
+        "group": "5ebbf26678f5c45c",
+        "order": 11,
+        "width": 5,
+        "height": 1,
+        "passthru": false,
+        "label": "Reset",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "icon": "",
+        "payload": "[]",
+        "payloadType": "json",
+        "topic": "topic",
+        "topicType": "msg",
+        "x": 450,
+        "y": 1440,
+        "wires": [
+            [
+                "d6f132d3fdcf63f9"
+            ]
+        ]
+    },
+    {
+        "id": "7a8cca26e299498a",
+        "type": "ui_text",
+        "z": "667f94d3bc571df0",
+        "group": "5ebbf26678f5c45c",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "name": "Possible Mech Malf Mobile (LABEL)",
+        "label": "Possible Mechanical Malfunction Status",
+        "format": "{{msg.payload}}",
+        "layout": "row-center",
+        "x": 1360,
+        "y": 1160,
+        "wires": []
+    },
+    {
+        "id": "c462d8adffcac1f8",
+        "type": "s7 in",
+        "z": "667f94d3bc571df0",
+        "endpoint": "bdb2df8dbc506894",
+        "mode": "single",
+        "variable": "x1B2",
+        "diff": true,
+        "name": "Processing Statiion",
+        "x": 710,
+        "y": 480,
+        "wires": [
+            [
+                "2014c31cbb82f51f"
+            ]
+        ]
+    },
+    {
+        "id": "fb7651b073d12636",
+        "type": "ui_text",
+        "z": "667f94d3bc571df0",
+        "group": "5ebbf26678f5c45c",
+        "order": 3,
+        "width": 0,
+        "height": 0,
+        "name": "Mobile Mech_1_status",
+        "label": "Mech_1 (Downstream - Sorting) ",
+        "format": "{{msg.payload}}",
+        "layout": "row-spread",
+        "x": 960,
+        "y": 1060,
+        "wires": []
+    },
+    {
+        "id": "b45b4a2e505832af",
+        "type": "ui_text",
+        "z": "667f94d3bc571df0",
+        "group": "25190aeb47b782c9",
+        "order": 2,
+        "width": 7,
+        "height": 1,
+        "name": "",
+        "label": "Mech_1 (Downstream - Sorting) _status",
+        "format": "{{msg.payload}}",
+        "layout": "row-spread",
+        "x": 1020,
+        "y": 1120,
+        "wires": []
+    },
+    {
+        "id": "10ba51c382025832",
+        "type": "ui_text",
+        "z": "667f94d3bc571df0",
+        "group": "25190aeb47b782c9",
+        "order": 3,
+        "width": 7,
+        "height": 1,
+        "name": "",
+        "label": "Mech_2 (Sorting - Upstream) _status",
+        "format": "{{msg.payload}}",
+        "layout": "row-spread",
+        "x": 1010,
+        "y": 1220,
+        "wires": []
+    },
+    {
+        "id": "74a64a43e3d01d69",
+        "type": "ui_text",
+        "z": "667f94d3bc571df0",
+        "group": "5ebbf26678f5c45c",
+        "order": 4,
+        "width": 0,
+        "height": 0,
+        "name": "Mobile Mech_2_status",
+        "label": "Mech_2 (Sorting - Upstream)",
+        "format": "{{msg.payload}}",
+        "layout": "row-spread",
+        "x": 960,
+        "y": 1180,
+        "wires": []
+    },
+    {
+        "id": "a8d67fdd18a324d3",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Mech_1 Output from ML Model",
+        "func": "// Generate a random integer between 6500 and 7500\nlet randomValue = Math.floor(Math.random() * (4.5 - 5.5 + 1)) + 5;\n\n// Set the payload to the random value\nmsg.payload = randomValue;\n\n// Set a topic for chart labeling (optional)\nmsg.topic = \"Random Value\";\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 670,
+        "y": 1080,
+        "wires": [
+            [
+                "fb7651b073d12636",
+                "b45b4a2e505832af"
+            ]
+        ]
+    },
+    {
+        "id": "4783d729f9fdf2cd",
+        "type": "function",
+        "z": "667f94d3bc571df0",
+        "name": "Mech_2 Output from ML Model",
+        "func": "// Generate a random integer between 6500 and 7500\nlet randomValue = Math.floor(Math.random() * (4.5 - 5.5 + 1)) + 5;\n\n// Set the payload to the random value\nmsg.payload = randomValue;\n\n// Set a topic for chart labeling (optional)\nmsg.topic = \"Random Value\";\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 650,
+        "y": 1200,
+        "wires": [
+            [
+                "74a64a43e3d01d69",
+                "10ba51c382025832"
+            ]
+        ]
+    },
+    {
+        "id": "798cb681128ab9ab",
+        "type": "debug",
+        "z": "667f94d3bc571df0",
+        "name": "debug 33",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 340,
+        "y": 1100,
+        "wires": []
+    },
+    {
+        "id": "bf18141b93b1ccfe",
+        "type": "remote-access",
+        "z": "667f94d3bc571df0",
+        "confignode": "9ced608a8bf02c8a",
+        "name": "Remote Access (Mobile)",
+        "verbose": 0,
+        "x": 810,
+        "y": 920,
+        "wires": [
+            [],
+            []
+        ]
+    },
+    {
+        "id": "bdb2df8dbc506894",
+        "type": "s7 endpoint",
+        "transport": "iso-on-tcp",
+        "address": "10.1.1.8",
+        "port": "102",
+        "rack": "0",
+        "slot": "1",
+        "localtsaphi": "01",
+        "localtsaplo": "00",
+        "remotetsaphi": "01",
+        "remotetsaplo": "00",
+        "connmode": "rack-slot",
+        "adapter": "",
+        "busaddr": "2",
+        "cycletime": "300",
+        "timeout": "2000",
+        "name": "Handling St.2 PLC",
+        "vartable": [
+            {
+                "addr": "I0.2",
+                "name": "x1B2"
+            },
+            {
+                "addr": "I0.3",
+                "name": "x1B3"
+            },
+            {
+                "addr": "I0.1",
+                "name": "x1B1"
+            }
+        ]
+    },
+    {
+        "id": "bf2c04d07e34bebd",
+        "type": "gauth",
+        "name": "node-red-mps500-cloud@mps500-cloud.iam.gserviceaccount.com"
+    },
+    {
+        "id": "e7c249d4733db719",
+        "type": "s7 endpoint",
+        "d": true,
+        "transport": "iso-on-tcp",
+        "address": "10.1.1.2",
+        "port": "102",
+        "rack": "0",
+        "slot": "1",
+        "localtsaphi": "01",
+        "localtsaplo": "00",
+        "remotetsaphi": "01",
+        "remotetsaplo": "00",
+        "connmode": "rack-slot",
+        "adapter": "",
+        "busaddr": "2",
+        "cycletime": "2000",
+        "timeout": "2000",
+        "name": "",
+        "vartable": [
+            {
+                "addr": "I0.2",
+                "name": "x1B1"
+            },
+            {
+                "addr": "Q0.1",
+                "name": "x2M1"
+            }
+        ]
+    },
+    {
+        "id": "87a9594116ec3158",
+        "type": "s7 endpoint",
+        "d": true,
+        "transport": "iso-on-tcp",
+        "address": "10.1.1.4",
+        "port": "102",
+        "rack": "0",
+        "slot": "1",
+        "localtsaphi": "01",
+        "localtsaplo": "00",
+        "remotetsaphi": "01",
+        "remotetsaplo": "00",
+        "connmode": "rack-slot",
+        "adapter": "",
+        "busaddr": "2",
+        "cycletime": "2000",
+        "timeout": "2000",
+        "name": "",
+        "vartable": [
+            {
+                "addr": "Q0.3",
+                "name": "x3M1"
+            },
+            {
+                "addr": "I0.1",
+                "name": "xB2"
+            }
+        ]
+    },
+    {
+        "id": "ui_group_1",
+        "type": "ui_group",
+        "name": "График",
+        "tab": "",
+        "order": 1,
+        "disp": true,
+        "width": "15",
+        "collapse": false
+    },
+    {
+        "id": "97130b31c1cd23df",
+        "type": "ui_group",
+        "name": "Line chart test",
+        "tab": "4b088cde92a3dbcc",
+        "order": 1,
+        "disp": true,
+        "width": "10",
+        "collapse": false
+    },
+    {
+        "id": "9ced608a8bf02c8a",
+        "type": "remote-config",
+        "name": "Node-RED UI",
+        "host": "localhost",
+        "protocol": "http",
+        "port": "1880",
+        "baseurl": "/ui",
+        "instancehash": "",
+        "server": "nodered02.remote-red.com",
+        "region": "de"
+    },
+    {
+        "id": "6e632216b63a785c",
+        "type": "mqtt-broker",
+        "name": "",
+        "broker": "test.mosquitto.org",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "a6d17db3e681f4f2",
+        "type": "ui_group",
+        "name": "Monitoring",
+        "tab": "0a77aa88371b55fd",
+        "order": 2,
+        "disp": true,
+        "width": 22,
+        "collapse": false
+    },
+    {
+        "id": "9afa42d3ad1b76fd",
+        "type": "ui_group",
+        "name": "Pressure_Managing",
+        "tab": "0a77aa88371b55fd",
+        "order": 4,
+        "disp": true,
+        "width": 9,
+        "collapse": false
+    },
+    {
+        "id": "25190aeb47b782c9",
+        "type": "ui_group",
+        "name": "Mechanical Malfunction Prediction",
+        "tab": "0a77aa88371b55fd",
+        "order": 5,
+        "disp": true,
+        "width": 7,
+        "collapse": false
+    },
+    {
+        "id": "22a8ef49f3ae258f",
+        "type": "ui_group",
+        "name": "Time-series Line Chart",
+        "tab": "0a77aa88371b55fd",
+        "order": 3,
+        "disp": true,
+        "width": "22",
+        "collapse": false
+    },
+    {
+        "id": "5ebbf26678f5c45c",
+        "type": "ui_group",
+        "name": "Mobile Dashboard",
+        "tab": "d5708fddbe2f7d10",
+        "order": 1,
+        "disp": true,
+        "width": 7,
+        "collapse": false
+    },
+    {
+        "id": "4b088cde92a3dbcc",
+        "type": "ui_tab",
+        "name": "Tab 1",
+        "icon": "dashboard",
+        "order": 1
+    },
+    {
+        "id": "0a77aa88371b55fd",
+        "type": "ui_tab",
+        "name": "Handling_station_Admin_Action",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "d5708fddbe2f7d10",
+        "type": "ui_tab",
+        "name": "Mobile Dashboard",
+        "icon": "dashboard",
+        "order": 9,
+        "disabled": false,
+        "hidden": false
+    }
+]
