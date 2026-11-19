@@ -49,11 +49,9 @@ data/
 notebooks/
   RandomForest_classifier_regressor.ipynb   Random Forest fault classifier and pressure regressor
   GradientBoostingRegressor_CV.ipynb        Gradient Boosting pressure regressor
-  forward_AC.csv, forward_CB.csv,           The four training datasets, rebuilt from the
-  backward_CA.csv, backward_BC.csv          Excel files (see "Training datasets")
+  forward_AC.csv, forward_CB.csv,           The four training datasets
+  backward_CA.csv, backward_BC.csv          (see "Training datasets")
   early_experiments/                        Earlier attempts made while developing the method
-scripts/
-  build_datasets.py               Rebuilds the four CSV files from data/dataset_for_ml/
 node-red/
   FINAL.json                      Node-RED flow: data collection + dashboard
 requirements.txt
@@ -88,33 +86,20 @@ For example, `A_B_3.5_N_Y.xlsx` means:
 
 ### Training datasets
 
-The training notebook reads four CSV files: `forward_AC.csv`, `forward_CB.csv`, `backward_CA.csv` and `backward_BC.csv`. Each has the columns `Time` (ms), `Pressure` (bar) and `Mechanism` (0 = normal, 1 = fault).
+The training notebook reads four CSV files, stored in `notebooks/`: `forward_AC.csv`, `forward_CB.csv`, `backward_CA.csv` and `backward_BC.csv`. Each has the columns `Pressure` (bar), `Time` (ms) and `Mechanism` (0 = normal, 1 = fault).
 
-**The original CSV files were not preserved.** The files in `notebooks/` were **rebuilt** from the Excel files by `scripts/build_datasets.py`:
+These are the files the reported results were produced with: running the training notebook on them reproduces every result saved in it.
 
-| Dataset | Rebuilt from | Samples |
+How they relate to the Excel files in `data/dataset_for_ml/`:
+
+| Dataset | Corresponding Excel file | Samples |
 |---|---|---|
-| forward_AC | `AC_Downstream_to_Sort.xlsx`, as is | 424 |
-| forward_CB | CB columns of `full_AB_p_m1_m2.xlsx` | 424 |
-| backward_CA | `CA_Sorting_to_Downstream.xlsx`, as is | 421 |
-| backward_BC | `BC_Upstream_to_Sorting.xlsx`, without row 84 | 421 |
+| forward_AC | `AC_Downstream_to_Sort.xlsx` (identical) | 424 |
+| forward_CB | `CB_Sort_to_Upstream.xlsx` plus two repeated rows (see known issues) | 424 |
+| backward_CA | `CA_Sorting_to_Downstream.xlsx` (identical) | 421 |
+| backward_BC | `BC_Upstream_to_Sorting.xlsx` without its row 84, a pass that is also missing from backward_CA | 421 |
 
-For backward_BC, row 84 (a faulty 3.5 bar sample) is removed because the same pass is missing from backward_CA. This gives the 421 samples of the original file.
-
-The training notebook was then run on the rebuilt files and compared with the results saved in it from the original files:
-
-| Dataset | Random Forest classifier | Random Forest regressor |
-|---|---|---|
-| forward_AC | Identical (settings, CV 94.72%, test 92.19%, confusion matrix) | Identical (MSE 0.1732, R² 0.8168) |
-| forward_CB | Test results identical (84.38%, same confusion matrix); CV 91.11% vs 90.56% | Close: MSE 0.1974, R² 0.7913 vs 0.2035, 0.7848 |
-| backward_CA | Identical (CV 95.51%, test 84.38%, confusion matrix) | Identical (MSE 0.2170, R² 0.7766) |
-| backward_BC | Identical (CV 92.99%, test 90.62%, confusion matrix) | Identical (MSE 0.0772, R² 0.9205) |
-
-The original forward_CB file had 259 normal and 165 faulty samples, according to the notebook's printout. The Excel data gives 261 and 163, and the exact difference could not be recovered.
-
-The original backward_BC file also contained one invalid label (`4035`). The rebuilt file has only 0 and 1.
-
-Test set sizes (Normal / Faulty), the same for the original and the rebuilt files:
+Test set sizes (Normal / Faulty) after the 85 / 15 split:
 
 | Dataset | Samples | Test set |
 |---|---|---|
@@ -125,12 +110,12 @@ Test set sizes (Normal / Faulty), the same for the original and the rebuilt file
 
 ### Sample distribution
 
-Each cell is Normal / Faulty, counted from the rebuilt training datasets.
+Each cell is Normal / Faulty, counted from the four training datasets.
 
 | Dataset | 3.5 bar | 4 bar | 5 bar | 6 bar | All |
 |---|---|---|---|---|---|
 | forward_AC | 40 / 44 | 30 / 40 | 129 / 31 | 57 / 53 | 256 / 168 |
-| forward_CB | 40 / 44 | 27 / 43 | 132 / 28 | 62 / 48 | 261 / 163 |
+| forward_CB | 40 / 44 | 27 / 43 | 132 / 28 | 60 / 50 | 259 / 165 |
 | backward_CA | 40 / 44 | 30 / 40 | 129 / 30 | 55 / 53 | 254 / 167 |
 | backward_BC | 40 / 44 | 27 / 43 | 134 / 25 | 60 / 48 | 261 / 160 |
 
@@ -211,25 +196,20 @@ The flow imports without the following, but these nodes will show errors until t
    ```
    pip install -r requirements.txt
    ```
-2. Optional: the four CSV files are already in `notebooks/`. To rebuild them from the Excel data, run this from the repository root:
-   ```
-   python scripts/build_datasets.py
-   ```
-3. Create two empty folders in `notebooks/`: `classifier/` and `regressor/`. The notebook saves models into them.
-4. Open `notebooks/RandomForest_classifier_regressor.ipynb` in Jupyter and run all cells.
+2. Create two empty folders in `notebooks/`: `classifier/` and `regressor/`. The notebook saves models into them.
+3. Open `notebooks/RandomForest_classifier_regressor.ipynb` in Jupyter and run all cells. It reads the four CSV files from the same folder.
 
 ## Known gaps and issues
 
 ### Missing files
 
-- **The original four training CSV files were not preserved.** The rebuilt files reproduce the Random Forest results exactly for three datasets and closely for forward_CB (see "Training datasets").
 - **The Gradient Boosting classifier code is not included.**
 - **The Gradient Boosting regressor notebook uses fixed settings.** The run with grid search (best learning rate 0.05) is not included, so this notebook's results differ from the grid-searched Gradient Boosting results.
 
 ### Data issues
 
 - **The backward datasets have 421 samples; the forward ones have 424.**
-- **The original `backward_BC.csv` contained one invalid label.** The value `4035` appeared instead of 0 or 1. The rebuilt file does not have it.
+- **`forward_CB.csv` contains two rows that appear to be accidental repeats.** Lines 371–372 of the file (6 bar, faulty, 2277 ms and 2279 ms) repeat lines 368–369. They are 2 of 424 samples, and the reported results were produced with them included.
 
 ### Code issues
 
