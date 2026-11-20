@@ -11,6 +11,7 @@ The project detects **mechanical faults** and **abnormal air pressure** on the s
 - [Data](#data)
 - [Notebooks](#notebooks)
 - [Node-RED flow](#node-red-flow)
+- [Revision analysis](#revision-analysis)
 - [How to run](#how-to-run)
 - [Known gaps and issues](#known-gaps-and-issues)
 - [Authors](#authors)
@@ -54,6 +55,7 @@ notebooks/
   early_experiments/                        Earlier attempts made while developing the method
 node-red/
   FINAL.json                      Node-RED flow: data collection + dashboard
+revision/                         Revision analysis: grouped validation (see "Revision analysis")
 requirements.txt
 ```
 
@@ -190,6 +192,25 @@ The flow imports without the following, but these nodes will show errors until t
 - your own Remote-RED instance (its connection code was removed from this copy);
 - the dashboard images `/images/phase1_static.jpg` to `phase4_static.jpg`.
 
+## Revision analysis
+
+The folder [`revision/`](revision/) contains an additional analysis made for the manuscript revision. It uses only the real collected data.
+
+**Why it was done.** The original notebook tests the models on a random 15% of the rows. Rows from the same recording run end up in both training and testing, and rows from one run are very similar to each other, which can make accuracy look better than it really is. The revision analysis always tests on **whole recording runs that were not used for training**.
+
+**What it does.**
+
+- Finds the recording run of every row by matching the four training files to the raw recordings in `data/dataset_for_ml/` (16 runs per segment).
+- Runs grouped, repeated, nested cross-validation (3 outer folds × 3 repeats; recording run as the group).
+- Compares Random Forest and Gradient Boosting with simple baselines and other common models.
+- Checks which inputs matter (Time / Pressure / both), how well pressure can be estimated from Time alone, and random-row vs grouped testing.
+
+**Main result.** Fault detection stays at about 86–91% accuracy on forward_AC, backward_CA and backward_BC when tested on new recording runs. For forward_CB it drops from about 89% (random rows) to about 62%, because its normal travel times change between recording runs.
+
+**Data note.** The revision analysis uses 422 rows for forward_CB: the two repeated rows listed under [Data issues](#data-issues) were left out, because they do not occur in the raw recordings. The other three files are used unchanged.
+
+Full method, results and output files: [`revision/README.md`](revision/README.md).
+
 ## How to run
 
 1. Install Python 3 and the packages:
@@ -209,7 +230,7 @@ The flow imports without the following, but these nodes will show errors until t
 ### Data issues
 
 - **The backward datasets have 421 samples; the forward ones have 424.**
-- **`forward_CB.csv` contains two rows that appear to be accidental repeats.** Lines 371–372 of the file (6 bar, faulty, 2277 ms and 2279 ms) repeat lines 368–369. They are 2 of 424 samples, and the reported results were produced with them included.
+- **`forward_CB.csv` contains two rows that appear to be accidental repeats.** Lines 371–372 of the file (6 bar, faulty, 2277 ms and 2279 ms) repeat lines 368–369. They are 2 of 424 samples. The original results were produced with them included; the [revision analysis](#revision-analysis) leaves them out.
 
 ### Code issues
 
